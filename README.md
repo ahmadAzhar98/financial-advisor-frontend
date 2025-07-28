@@ -30,6 +30,6 @@ npm install
 npm run dev
 
 
-> The app will run at: `http://localhost:5173` by default (or another port if specified).
+> The app will run at: `http://localhost:5173` by default.
 
 ---
