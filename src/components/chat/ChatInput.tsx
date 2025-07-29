@@ -2,11 +2,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
-export default function ChatInput({ onSend }: { onSend: (text: string) => void }) {
+export default function ChatInput({
+  onSend,
+  disabled = false, 
+}: {
+  onSend: (text: string) => void;
+  disabled?: boolean; 
+}) {
   const [input, setInput] = useState("");
 
   const handleSubmit = () => {
-    if (!input.trim()) return;
+    if (!input.trim() || disabled) return;
     onSend(input);
     setInput("");
   };
@@ -19,8 +25,11 @@ export default function ChatInput({ onSend }: { onSend: (text: string) => void }
         placeholder="Type a message..."
         className="flex-1"
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+        disabled={disabled}
       />
-      <Button onClick={handleSubmit}>Send</Button>
+      <Button onClick={handleSubmit} disabled={disabled}>
+        Send
+      </Button>
     </div>
   );
 }
