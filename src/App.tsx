@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
 import LoginPage from "@/pages/Login"
 import SignupPage from "@/pages/Signup"
-// import ChatPage from "@/pages/Chat"
 import Chat_Page from "@/pages/Chats"
 
 

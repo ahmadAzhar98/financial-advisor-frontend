@@ -37,10 +37,9 @@ export default function ChatLayout() {
         messagesArray = [];
       }
       
-      // Ensure each message has the correct structure and proper role mapping
       const formattedMessages = messagesArray.map((msg: any) => ({
-        role: (msg.role === "user" || msg.sender === "user" || msg.type === "user") ? "user" : "llm",
-        content: msg.content || msg.message || msg.text || ""
+        role: msg.sender === "user" ? "user" : "llm",   
+        content: msg.message || ""                     
       }));
       
       setMessages(formattedMessages);
@@ -60,6 +59,10 @@ export default function ChatLayout() {
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
     
+    // Add empty LLM message that we'll update as chunks arrive
+    const llmMessageIndex = messages.length + 1;
+    setMessages((prev) => [...prev, { role: "llm" as const, content: "" }]);
+    
     try {
       const token = localStorage.getItem("access_token");
       const res = await fetch(`/api/chat/${selectedThreadId}`, {
@@ -75,25 +78,61 @@ export default function ChatLayout() {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
       
-      const data = await res.json();
-      console.log('Send response:', data); // Debug log
+      // Handle streaming response
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
       
-      // Handle different possible response formats
-      const responseContent = data.response || data.message || data.content || "No response";
-      const llmMessage = { role: "llm" as const, content: responseContent };
+      if (!reader) {
+        throw new Error('No reader available');
+      }
       
-      setMessages((prev) => [...prev, llmMessage]);
+      let accumulatedContent = "";
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.chunk) {
+                accumulatedContent += data.chunk;
+                // Update the LLM message with accumulated content
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[llmMessageIndex] = {
+                    role: "llm",
+                    content: accumulatedContent
+                  };
+                  return newMessages;
+                });
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+              console.warn('Failed to parse streaming data:', line);
+            }
+          }
+        }
+      }
+      
     } catch (error) {
       console.error('Error sending message:', error);
-      // Remove the user message if sending failed
-      setMessages((prev) => prev.slice(0, -1));
+      // Remove both user and empty LLM messages if sending failed
+      setMessages((prev) => prev.slice(0, -2));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNewThread = async () => {
+  const handleNewThread = async (refreshThreads: () => void) => {
     try {
+      const title = prompt("Enter thread title:");
+      if (!title || title.trim() === "") return;
+
       const token = localStorage.getItem("access_token");
       const res = await fetch("/api/threads", {
         method: "POST",
@@ -101,24 +140,25 @@ export default function ChatLayout() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ title: "New Chat" }),
+        body: JSON.stringify({ title: title.trim() }),
       });
-      
+
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
-      
+
       const data = await res.json();
-      console.log('New thread response:', data); // Debug log
-      
       const threadId = data.thread_id || data.id || data.threadId;
+
       setSelectedThreadId(threadId);
       setMessages([]);
+
+      refreshThreads(); 
     } catch (error) {
-      console.error('Error creating new thread:', error);
+      console.error("Error creating new thread:", error);
     }
   };
-
+  
   const handleSelectThread = (id: string) => {
     setSelectedThreadId(id);
     fetchChat(id);
@@ -132,27 +172,33 @@ export default function ChatLayout() {
         selectedThreadId={selectedThreadId}
       />
       <div className="flex flex-col flex-1 p-4">
-        <div className="flex-1 overflow-auto space-y-2 flex flex-col">
+        <div className="flex-1 overflow-auto space-y-2 flex flex-col items-center">
           {messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`p-2 max-w-md rounded-lg ${
-                msg.role === "user" 
-                  ? "bg-blue-100 self-end" 
-                  : "bg-gray-100 self-start"
+              className={`p-4 w-3/4 ${
+                msg.role === "user"
+                  ? "bg-blue-100"
+                  : msg.role === "llm"
+                  ? "bg-gray-100"
+                  : "bg-gray-50"
               }`}
             >
               {msg.content}
             </div>
           ))}
+
           {loading && (
-            <div className="text-sm text-gray-500 italic">Thinking...</div>
+            <div className="text-sm text-gray-500 italic p-4 bg-gray-100 w-3/4">
+              Thinking...
+            </div>
           )}
         </div>
+
         {selectedThreadId && (
           <ChatInput onSend={handleSend} disabled={loading} />
         )}
       </div>
     </div>
-  );
+  );  
 }

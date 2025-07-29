@@ -5,21 +5,22 @@ export default function Sidebar({
   onSelectThread,
   selectedThreadId,
 }: {
-  onNewThread: () => void;
+  onNewThread: (refreshThreads: () => void) => void; // updated to accept callback
   onSelectThread: (id: string) => void;
   selectedThreadId: string | null;
 }) {
   const [threads, setThreads] = useState<{ id: string; title: string }[]>([]);
 
+  const fetchThreads = async () => {
+    const token = localStorage.getItem("access_token");
+    const res = await fetch("/api/threads", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    setThreads(data);
+  };
+
   useEffect(() => {
-    const fetchThreads = async () => {
-      const token = localStorage.getItem("access_token");
-      const res = await fetch("/api/threads", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setThreads(data);
-    };
     fetchThreads();
   }, []);
 
@@ -35,7 +36,7 @@ export default function Sidebar({
         <div className="space-y-2">
           <div
             className="cursor-pointer hover:bg-gray-700 p-2 rounded"
-            onClick={onNewThread}
+            onClick={() => onNewThread(fetchThreads)} // pass refresh callback
           >
             + New Chat
           </div>
